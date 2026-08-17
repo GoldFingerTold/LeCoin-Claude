@@ -1,0 +1,322 @@
+// Rutas protegidas del panel: editar textos, subir/borrar/reordenar fotos de la
+// galería, reemplazar imágenes fijas, gestionar redes sociales, moderar testimonios y
+// ver los mensajes de contacto. Se montan detrás de auth.requireAdmin en index.js.
+
+const express = require('express');
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const db = require('../db');
+
+const router = express.Router();
+
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const ALLOWED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || '.jpg';
+    const name = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+    cb(null, name);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 8 * 1024 * 1024 }, // 8MB
+  fileFilter: (req, file, cb) => {
+    if (!ALLOWED_TYPES.has(file.mimetype)) {
+      return cb(new Error('Formato de imagen no soportado. Usá JPG, PNG, WEBP o GIF.'));
+    }
+    cb(null, true);
+  }
+});
+
+function withMulterErrors(field) {
+  const mw = upload.single(field);
+  return (req, res, next) => {
+    mw(req, res, (err) => {
+      if (err) return res.status(400).json({ error: err.message });
+      next();
+    });
+  };
+}
+
+// ---------- Textos ----------
+
+router.get('/content', (req, res) => {
+  const rows = db.prepare('SELECT key, value FROM content').all();
+  const content = {};
+  for (const row of rows) content[row.key] = row.value;
+  res.json({ content });
+});
+
+router.put('/content', (req, res) => {
+  const updates = req.body || {};
+  const keys = Object.keys(updates);
+  if (keys.length === 0) return res.status(400).json({ error: 'No hay campos para actualizar.' });
+
+  const upsert = db.prepare(
+    'INSERT INTO content (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  );
+  const applyAll = db.transaction((entries) => {
+    for (const [key, value] of entries) upsert.run(key, String(value ?? ''));
+  });
+  applyAll(Object.entries(updates));
+
+  res.json({ ok: true });
+});
+
+// Reemplazar una imagen fija del contenido (banner_image o escuela_image), o subir
+// una imagen suelta y devolver su URL para usarla donde haga falta.
+router.post('/content/image', withMulterErrors('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No se recibió ninguna imagen.' });
+  const url = `/uploads/${req.file.filename}`;
+
+  const { key } = req.body || {};
+  if (key) {
+    db.prepare(
+      'INSERT INTO content (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+    ).run(key, url);
+  }
+
+  res.json({ ok: true, url });
+});
+
+// ---------- Galería ----------
+
+router.get('/gallery', (req, res) => {
+  const items = db
+    .prepare('SELECT id, url, alt_text AS alt, position FROM gallery_images ORDER BY position ASC, id ASC')
+    .all();
+  res.json({ items });
+});
+
+router.post('/gallery', withMulterErrors('image'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No se recibió ninguna imagen.' });
+  const url = `/uploads/${req.file.filename}`;
+  const alt = (req.body && req.body.alt) || '';
+
+  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM gallery_images').get().m;
+  const info = db
+    .prepare('INSERT INTO gallery_images (url, alt_text, position) VALUES (?, ?, ?)')
+    .run(url, alt, maxPos + 1);
+
+  res.json({ ok: true, id: info.lastInsertRowid, url });
+});
+
+router.delete('/gallery/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.prepare('SELECT * FROM gallery_images WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'No existe esa imagen.' });
+
+  db.prepare('DELETE FROM gallery_images WHERE id = ?').run(id);
+
+  // Si el archivo vive en /uploads (subido desde el panel), lo borramos también.
+  // Las imágenes semilla en /img/seed se dejan intactas.
+  if (row.url.startsWith('/uploads/')) {
+    const filePath = path.join(UPLOAD_DIR, path.basename(row.url));
+    fs.unlink(filePath, () => {});
+  }
+
+  res.json({ ok: true });
+});
+
+// Reordenar: recibe la lista completa de ids en el orden final.
+router.put('/gallery/reorder', (req, res) => {
+  const { order } = req.body || {};
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'Falta el array "order".' });
+
+  const update = db.prepare('UPDATE gallery_images SET position = ? WHERE id = ?');
+  const applyAll = db.transaction((ids) => {
+    ids.forEach((id, index) => update.run(index, Number(id)));
+  });
+  applyAll(order);
+
+  res.json({ ok: true });
+});
+
+// ---------- Redes sociales ----------
+
+router.get('/social', (req, res) => {
+  const items = db
+    .prepare('SELECT id, platform, label, url, visible, position FROM social_links ORDER BY position ASC, id ASC')
+    .all();
+  res.json({ items });
+});
+
+router.post('/social', (req, res) => {
+  const { platform, label, url } = req.body || {};
+  if (!platform || !label || !url) {
+    return res.status(400).json({ error: 'Faltan datos (plataforma, etiqueta o URL).' });
+  }
+  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM social_links').get().m;
+  const info = db
+    .prepare('INSERT INTO social_links (platform, label, url, visible, position) VALUES (?, ?, ?, 1, ?)')
+    .run(platform.trim(), label.trim(), url.trim(), maxPos + 1);
+  res.json({ ok: true, id: info.lastInsertRowid });
+});
+
+// IMPORTANTE: "reorder" tiene que registrarse ANTES que "/:id" - si no, Express matchea
+// "reorder" como si fuera el valor de :id (rutas fijas antes que rutas con parámetro).
+router.put('/social/reorder', (req, res) => {
+  const { order } = req.body || {};
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'Falta el array "order".' });
+
+  const update = db.prepare('UPDATE social_links SET position = ? WHERE id = ?');
+  const applyAll = db.transaction((ids) => {
+    ids.forEach((id, index) => update.run(index, Number(id)));
+  });
+  applyAll(order);
+
+  res.json({ ok: true });
+});
+
+router.put('/social/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.prepare('SELECT * FROM social_links WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'No existe esa red.' });
+
+  const { platform, label, url, visible } = req.body || {};
+  db.prepare(
+    'UPDATE social_links SET platform = ?, label = ?, url = ?, visible = ? WHERE id = ?'
+  ).run(
+    platform ?? row.platform,
+    label ?? row.label,
+    url ?? row.url,
+    visible === undefined ? row.visible : (visible ? 1 : 0),
+    id
+  );
+  res.json({ ok: true });
+});
+
+router.delete('/social/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const info = db.prepare('DELETE FROM social_links WHERE id = ?').run(id);
+  if (info.changes === 0) return res.status(404).json({ error: 'No existe esa red.' });
+  res.json({ ok: true });
+});
+
+// ---------- Testimonios (moderación) ----------
+
+// Trae TODOS los testimonios sin importar el estado - a diferencia de /api/content,
+// que solo devuelve los aprobados. Así el panel puede mostrar la bandeja completa.
+router.get('/testimonials', (req, res) => {
+  const items = db
+    .prepare("SELECT * FROM testimonials ORDER BY status = 'pending' DESC, created_at DESC")
+    .all();
+  res.json({ items });
+});
+
+// El propio dueño carga un testimonio ya aprobado directamente (sin pasar por "pending").
+router.post('/testimonials', (req, res) => {
+  const { name, rating, text } = req.body || {};
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Falta el nombre.' });
+  if (!text || !text.trim()) return res.status(400).json({ error: 'Falta el texto.' });
+
+  let ratingValue = null;
+  if (rating !== undefined && rating !== null && rating !== '') {
+    const n = Number(rating);
+    if (Number.isInteger(n) && n >= 1 && n <= 5) ratingValue = n;
+  }
+
+  const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM testimonials').get().m;
+  const info = db
+    .prepare("INSERT INTO testimonials (name, rating, text, status, position) VALUES (?, ?, ?, 'approved', ?)")
+    .run(name.trim(), ratingValue, text.trim(), maxPos + 1);
+
+  res.json({ ok: true, id: info.lastInsertRowid });
+});
+
+// "reorder" antes que "/:id" por el mismo motivo que en redes sociales (ver más arriba).
+router.put('/testimonials/reorder', (req, res) => {
+  const { order } = req.body || {};
+  if (!Array.isArray(order)) return res.status(400).json({ error: 'Falta el array "order".' });
+
+  const update = db.prepare('UPDATE testimonials SET position = ? WHERE id = ?');
+  const applyAll = db.transaction((ids) => {
+    ids.forEach((id, index) => update.run(index, Number(id)));
+  });
+  applyAll(order);
+
+  res.json({ ok: true });
+});
+
+// Aprobar, rechazar, o editar el texto/nombre/puntuación de un testimonio existente.
+router.put('/testimonials/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const row = db.prepare('SELECT * FROM testimonials WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ error: 'No existe ese testimonio.' });
+
+  const { name, rating, text, status } = req.body || {};
+
+  if (status !== undefined && !['pending', 'approved', 'rejected'].includes(status)) {
+    return res.status(400).json({ error: 'Estado inválido.' });
+  }
+
+  let ratingValue = row.rating;
+  if (rating !== undefined) {
+    if (rating === null || rating === '') {
+      ratingValue = null;
+    } else {
+      const n = Number(rating);
+      if (!Number.isInteger(n) || n < 1 || n > 5) {
+        return res.status(400).json({ error: 'La puntuación tiene que ser un número entero de 1 a 5.' });
+      }
+      ratingValue = n;
+    }
+  }
+
+  // Si se aprueba recién ahora y no tenía posición asignada, lo mandamos al final.
+  let position = row.position;
+  if (status === 'approved' && row.status !== 'approved') {
+    const maxPos = db.prepare('SELECT COALESCE(MAX(position), -1) AS m FROM testimonials').get().m;
+    position = maxPos + 1;
+  }
+
+  db.prepare(
+    'UPDATE testimonials SET name = ?, rating = ?, text = ?, status = ?, position = ? WHERE id = ?'
+  ).run(
+    (name ?? row.name).trim(),
+    ratingValue,
+    (text ?? row.text).trim(),
+    status ?? row.status,
+    position,
+    id
+  );
+
+  res.json({ ok: true });
+});
+
+router.delete('/testimonials/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const info = db.prepare('DELETE FROM testimonials WHERE id = ?').run(id);
+  if (info.changes === 0) return res.status(404).json({ error: 'No existe ese testimonio.' });
+  res.json({ ok: true });
+});
+
+// ---------- Mensajes de contacto ----------
+
+router.get('/messages', (req, res) => {
+  const items = db.prepare('SELECT * FROM contact_messages ORDER BY created_at DESC').all();
+  res.json({ items });
+});
+
+router.put('/messages/:id/read', (req, res) => {
+  const id = Number(req.params.id);
+  const info = db.prepare('UPDATE contact_messages SET is_read = 1 WHERE id = ?').run(id);
+  if (info.changes === 0) return res.status(404).json({ error: 'No existe ese mensaje.' });
+  res.json({ ok: true });
+});
+
+router.delete('/messages/:id', (req, res) => {
+  const id = Number(req.params.id);
+  const info = db.prepare('DELETE FROM contact_messages WHERE id = ?').run(id);
+  if (info.changes === 0) return res.status(404).json({ error: 'No existe ese mensaje.' });
+  res.json({ ok: true });
+});
+
+module.exports = router;

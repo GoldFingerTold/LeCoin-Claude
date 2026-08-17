@@ -1,0 +1,73 @@
+require('dotenv').config();
+
+const path = require('path');
+const express = require('express');
+const session = require('express-session');
+const cors = require('cors');
+
+const auth = require('./auth');
+const contentRoutes = require('./routes/content');
+const contactRoutes = require('./routes/contact');
+const testimonialsRoutes = require('./routes/testimonials');
+const adminRoutes = require('./routes/admin');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// CORS_ORIGIN solo hace falta cuando el frontend vive en un dominio distinto al de este
+// backend. Si no está definida (caso normal: todo en el mismo dominio), no se activa nada.
+const crossOriginList = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+const isCrossOrigin = crossOriginList.length > 0;
+
+app.set('trust proxy', 1);
+
+if (isCrossOrigin) {
+  app.use(cors({ origin: crossOriginList, credentials: true }));
+}
+
+app.use(express.json());
+
+app.use(
+  session({
+    name: 'lecoin.sid',
+    secret: process.env.SESSION_SECRET || 'dev-secret-cambiar-en-produccion',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60 * 8, // 8 horas
+      ...(isCrossOrigin ? { sameSite: 'none', secure: true } : {})
+    }
+  })
+);
+
+// Archivos estáticos: el sitio público, las imágenes semilla y lo subido desde el panel.
+app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// API pública
+app.use('/api/content', contentRoutes);
+app.use('/api/contact', contactRoutes);
+app.use('/api/testimonials', testimonialsRoutes);
+
+// Login / logout del panel
+app.post('/api/admin/login', auth.login);
+app.post('/api/admin/logout', auth.logout);
+app.get('/api/admin/session', (req, res) => {
+  res.json({ isAdmin: Boolean(req.session && req.session.isAdmin) });
+});
+app.post('/api/admin/recover', auth.recover);
+
+// Cambio de contraseña del panel (requiere sesión activa)
+app.put('/api/admin/password', auth.requireAdmin, auth.changePassword);
+
+// Resto de la API de administración, protegida
+app.use('/api/admin', auth.requireAdmin, adminRoutes);
+
+app.listen(PORT, () => {
+  console.log(`Sitio de LeCoin Recepciones corriendo en http://localhost:${PORT}`);
+  console.log(`Panel de administración en http://localhost:${PORT}/admin`);
+});
