@@ -236,32 +236,6 @@ function initLightbox() {
   });
 }
 
-// ---------- Botón temporal de comparación (sacar cuando decidan) ----------
-// Alterna la clase body.flares, que activa/desactiva los destellos grises de la
-// franja de estadísticas (ver .sunburst en style.css). Guarda la elección en este
-// navegador para que no se pierda al recargar.
-
-function initFlaresToggle() {
-  const btn = document.getElementById('toggle-flares');
-  if (!btn) return;
-
-  function render() {
-    const on = document.body.classList.contains('flares');
-    btn.textContent = on ? '✨ Ver sin destellos' : '✨ Ver con destellos';
-  }
-
-  if (localStorage.getItem('lecoin-flares') === '1') {
-    document.body.classList.add('flares');
-  }
-  render();
-
-  btn.addEventListener('click', () => {
-    const on = document.body.classList.toggle('flares');
-    localStorage.setItem('lecoin-flares', on ? '1' : '0');
-    render();
-  });
-}
-
 // ---------- Nav móvil ----------
 
 function initNav() {
@@ -411,7 +385,6 @@ document.addEventListener('DOMContentLoaded', () => {
   initLightbox();
   initContactForm();
   initTestimonialForm();
-  initFlaresToggle();
   loadSite().catch((err) => {
     console.error('No se pudo cargar el contenido del sitio:', err);
   });
