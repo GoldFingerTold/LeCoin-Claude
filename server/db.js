@@ -78,7 +78,7 @@ db.exec(`
 
 // --- Contenido semilla (texto real del sitio actual de LeCoin Recepciones) ---
 const DEFAULT_CONTENT = {
-  site_name: 'LeCoin Recepciones',
+  site_name: 'Le Coin Eventos',
   site_tagline: 'Salón de eventos y recepciones',
 
   nav_home_label: 'Inicio',
@@ -88,7 +88,7 @@ const DEFAULT_CONTENT = {
   nav_contacto_label: 'Contacto',
 
   banner_image: '/img/seed/banquete.png',
-  banner_title: 'LeCoin Recepciones',
+  banner_title: 'Le Coin Eventos',
   banner_subtitle: 'Un lugar especial donde tus momentos se convierten en recuerdos inolvidables.',
 
   stat_1_number: '50+',
@@ -133,7 +133,7 @@ const DEFAULT_CONTENT = {
   contact_email: 'info@lecoinrecepciones.com.ar',
   contact_hours: 'Lunes a Viernes, 09:00 a 18:00 hs',
 
-  footer_text: 'LeCoin Recepciones'
+  footer_text: 'Le Coin Eventos'
 };
 
 const DEFAULT_SOCIAL = [

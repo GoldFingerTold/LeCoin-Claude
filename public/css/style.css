@@ -1,36 +1,55 @@
 /* =========================================================================
-   LeCoin Recepciones — salón de eventos, estética oscura y elegante:
-   base carbón cálido, un único acento dorado/champagne (a propósito: el
-   sitio anterior tenía íconos en ocho colores sin relación entre sí, acá
-   se usa un solo acento consistente en todo el sitio), tipografía serif
-   editorial para títulos + sans-serif limpia para cuerpo, botones tipo
-   píldora, tarjetas con leve elevación para leerse sobre el fondo oscuro.
+   Le Coin Eventos — rediseño a pedido del cliente: fondo blanco (para que
+   conviva con el logo, monocromático) en vez de la paleta oscura/dorada
+   anterior. Un solo acento (negro/carbón) en vez de color, mismo criterio
+   de antes de "un solo acento consistente" pero llevado a monocromo.
+   El bloque ".sunburst" es la opción B (destellos grises desde un centro)
+   para comparar contra la opción A (blanco liso): activala agregando la
+   clase "flares" al <body> - ver public/js/main.js.
    ========================================================================= */
 
 :root {
-  --bg: #15120f;
-  --bg-alt: #1c1814;
-  --surface: #221d18;
-  --surface-2: #2a2420;
-  --ink: #f2ece3;
-  --ink-muted: #b3a596;
-  --gold: #cda05a;
-  --gold-dark: #a97f3c;
-  --gold-soft: rgba(205, 160, 90, 0.16);
-  --line: rgba(242, 236, 227, 0.1);
+  --bg: #fbfaf8;
+  --bg-alt: #f2efeb;
+  --surface: #ffffff;
+  --surface-2: #f5f3f0;
+  --ink: #1c1c1a;
+  --ink-muted: #756f68;
+  --gold: #1c1c1a;
+  --gold-dark: #3a3632;
+  --gold-soft: rgba(28, 28, 26, 0.06);
+  --line: rgba(28, 28, 26, 0.1);
 
   --radius-lg: 26px;
   --radius-md: 16px;
   --radius-sm: 12px;
   --radius-pill: 999px;
 
-  --shadow-soft: 0 24px 50px rgba(0, 0, 0, 0.45);
-  --shadow-card: 0 12px 30px rgba(0, 0, 0, 0.35);
+  --shadow-soft: 0 24px 50px rgba(20, 18, 15, 0.12);
+  --shadow-card: 0 12px 30px rgba(20, 18, 15, 0.08);
 
   --font-display: "Playfair Display", Georgia, serif;
   --font-body: "Poppins", "Segoe UI", sans-serif;
 
   --container: 1120px;
+}
+
+/* ---------- Destellos (opción B, toggle con body.flares) ---------- */
+
+.sunburst { position: absolute; inset: 0; overflow: hidden; pointer-events: none; display: none; }
+body.flares .sunburst { display: block; }
+.sunburst::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 220%;
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, -50%);
+  background: repeating-conic-gradient(from 0deg, rgba(28,28,26,0.06) 0deg 2.5deg, transparent 2.5deg 9deg);
+  border-radius: 50%;
+  mask-image: radial-gradient(circle, black 0%, transparent 62%);
+  -webkit-mask-image: radial-gradient(circle, black 0%, transparent 62%);
 }
 
 * { box-sizing: border-box; }
@@ -67,7 +86,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 0.78rem;
-  color: var(--gold);
+  color: var(--ink-muted);
   font-weight: 600;
   margin: 0 0 10px;
 }
@@ -89,16 +108,16 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.
 }
 .btn-primary {
   background: linear-gradient(135deg, var(--gold), var(--gold-dark));
-  color: #17130f;
+  color: #ffffff;
   box-shadow: var(--shadow-card);
 }
 .btn-primary:hover { transform: translateY(-2px); box-shadow: var(--shadow-soft); }
 .btn-ghost-dark {
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--ink);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.35);
 }
-.btn-ghost-dark:hover { background: rgba(255, 255, 255, 0.12); }
+.btn-ghost-dark:hover { background: rgba(255, 255, 255, 0.18); }
 
 /* ---------- Nav ---------- */
 
@@ -109,7 +128,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.
   transform: translateX(-50%);
   z-index: 100;
   width: min(94%, 1080px);
-  background: rgba(21, 18, 15, 0.78);
+  background: rgba(255, 255, 255, 0.82);
   backdrop-filter: blur(10px);
   border-radius: var(--radius-pill);
   box-shadow: var(--shadow-card);
@@ -129,7 +148,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.
   transition: background 0.2s ease, color 0.2s ease;
 }
 .nav-links a:hover { background: rgba(255, 255, 255, 0.08); }
-.nav-links a.nav-cta { background: var(--gold); color: #17130f; font-weight: 600; }
+.nav-links a.nav-cta { background: var(--gold); color: #ffffff; font-weight: 600; }
 .nav-links a.nav-cta:hover { background: var(--gold-dark); }
 
 .nav-toggle { display: none; flex-direction: column; gap: 5px; background: none; border: none; padding: 10px; cursor: pointer; }
@@ -167,9 +186,11 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.
 }
 
 .hero-content { position: relative; max-width: var(--container); margin: 0 auto; padding: 0 28px 90px; width: 100%; }
-.eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; color: var(--gold); margin: 0 0 14px; font-weight: 600; }
-.hero-title { font-size: clamp(2.4rem, 5.6vw, 4.2rem); margin-bottom: 18px; max-width: 780px; color: var(--ink); }
-.hero-subtitle { font-size: 1.1rem; max-width: 560px; margin: 0 0 32px; color: var(--ink-muted); }
+/* Estos tres quedan siempre claros a propósito: la portada sigue teniendo la foto con
+   velo oscuro debajo (ver .hero-veil), aunque el resto del sitio ahora sea blanco. */
+.eyebrow { text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; color: rgba(255,255,255,0.85); margin: 0 0 14px; font-weight: 600; }
+.hero-title { font-size: clamp(2.4rem, 5.6vw, 4.2rem); margin-bottom: 18px; max-width: 780px; color: #ffffff; }
+.hero-subtitle { font-size: 1.1rem; max-width: 560px; margin: 0 0 32px; color: rgba(255,255,255,0.78); }
 .hero-actions { display: flex; flex-wrap: wrap; gap: 14px; }
 
 /* ---------- Próximo evento ---------- */
@@ -203,8 +224,8 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.
 
 /* ---------- Stats ---------- */
 
-.stats { background: var(--surface); border-bottom: 1px solid var(--line); }
-.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; padding: 40px 28px; gap: 20px; }
+.stats { position: relative; background: var(--surface); border-bottom: 1px solid var(--line); overflow: hidden; }
+.stats-grid { position: relative; display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; padding: 40px 28px; gap: 20px; }
 .stat-number { display: block; font-family: var(--font-display); font-size: clamp(1.8rem, 3vw, 2.6rem); color: var(--gold); font-weight: 700; }
 .stat-label { display: block; font-size: 0.85rem; color: var(--ink-muted); margin-top: 6px; }
 
@@ -316,7 +337,7 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.
 .contacto-grid { display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 56px; align-items: start; }
 .info-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 18px; }
 .info-list li { display: flex; flex-direction: column; gap: 4px; }
-.info-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--gold); }
+.info-label { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-muted); }
 .contact-form { background: var(--surface); padding: 36px; border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
 
 @media (max-width: 900px) {
@@ -325,20 +346,39 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; line-height: 1.
 
 /* ---------- Footer ---------- */
 
-.footer { background: #0f0d0b; color: rgba(242,236,227,0.8); padding: 56px 0 34px; text-align: center; }
+.footer { background: var(--bg-alt); color: var(--ink); padding: 56px 0 34px; text-align: center; border-top: 1px solid var(--line); }
 .footer-inner { max-width: var(--container); margin: 0 auto; padding: 0 28px; }
 .footer-brand { font-family: var(--font-display); font-size: 1.3rem; color: var(--ink); margin: 0 0 22px; font-weight: 700; }
 
 .social-row { list-style: none; display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin: 0 0 26px; padding: 0; }
 .social-row a {
   width: 42px; height: 42px; display: flex; align-items: center; justify-content: center;
-  border-radius: 50%; background: rgba(255,255,255,0.06); color: var(--ink);
-  transition: background 0.2s ease, transform 0.2s ease;
+  border-radius: 50%; background: rgba(28,28,26,0.06); color: var(--ink);
+  transition: background 0.2s ease, transform 0.2s ease, color 0.2s ease;
 }
-.social-row a:hover { background: var(--gold); color: #17130f; transform: translateY(-2px); }
+.social-row a:hover { background: var(--gold); color: #ffffff; transform: translateY(-2px); }
 .social-row svg { width: 18px; height: 18px; }
 
-.copyright { font-size: 0.82rem; color: rgba(242,236,227,0.45); margin: 0; }
+.copyright { font-size: 0.82rem; color: var(--ink-muted); margin: 0; }
+
+/* ---------- Botón temporal de comparación (sacar cuando decidan) ---------- */
+
+.flares-toggle {
+  position: fixed;
+  bottom: 26px;
+  left: 26px;
+  z-index: 90;
+  padding: 13px 22px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--ink);
+  color: #ffffff;
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-soft);
+}
 
 /* ---------- WhatsApp flotante ---------- */
 
