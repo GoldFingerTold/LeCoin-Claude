@@ -79,6 +79,7 @@ db.exec(`
 // --- Contenido semilla (texto real del sitio actual de LeCoin Recepciones) ---
 const DEFAULT_CONTENT = {
   site_name: 'Le Coin Eventos',
+  logo_image: '/img/seed/logo.png',
   site_tagline: 'Salón de eventos y recepciones',
 
   nav_home_label: 'Inicio',

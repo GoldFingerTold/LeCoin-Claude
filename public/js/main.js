@@ -335,11 +335,13 @@ async function loadSite() {
   const res = await fetch(apiUrl('/api/content'));
   const { content, gallery, social, testimonials } = await res.json();
 
-  document.title = content.site_name || 'LeCoin Recepciones';
-  setText('nav-brand', content.site_name);
+  document.title = content.site_name || 'Le Coin Eventos';
   setText('footer-brand', content.site_name);
   setText('footer-text', content.footer_text);
   document.getElementById('footer-year').textContent = String(new Date().getFullYear());
+
+  const navLogo = document.getElementById('nav-logo');
+  if (navLogo && content.logo_image) navLogo.src = resolveImageUrl(content.logo_image);
 
   const banner = document.getElementById('banner-image');
   if (banner) banner.src = resolveImageUrl(content.banner_image) || '';
