@@ -3,16 +3,17 @@
 
 const express = require('express');
 const db = require('../db');
+const asyncHandler = require('../asyncHandler');
 
 const router = express.Router();
 
 const MAX_TEXT_LENGTH = 600;
 
-router.post('/', (req, res) => {
+router.post('/', asyncHandler(async (req, res) => {
   const { name, rating, text, website } = req.body || {};
 
   // Campo "website" es un honeypot: un campo oculto por CSS que ningún humano completa,
-  // pero que los bots de formularios sueles rellenar solos. Si viene con algo, se ignora
+  // pero que los bots de formularios suelen rellenar solos. Si viene con algo, se ignora
   // la petición como si hubiera funcionado (para no darle pistas al bot).
   if (website) {
     return res.json({ ok: true });
@@ -33,11 +34,16 @@ router.post('/', (req, res) => {
     ratingValue = n;
   }
 
-  db.prepare(
-    "INSERT INTO testimonials (name, rating, text, status) VALUES (?, ?, ?, 'pending')"
-  ).run(name.trim(), ratingValue, text.trim());
+  await db.getDb().collection('testimonials').insertOne({
+    name: name.trim(),
+    rating: ratingValue,
+    text: text.trim(),
+    status: 'pending',
+    position: 0,
+    created_at: new Date()
+  });
 
   res.json({ ok: true });
-});
+}));
 
 module.exports = router;

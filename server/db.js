@@ -1,82 +1,41 @@
-// Conexión a SQLite + esquema + contenido semilla.
-// Mismo patrón que sitio-celine-stajcer/server/db.js (node:sqlite, sin dependencias
-// nativas). Se ejecuta una sola vez al arrancar: si la base ya existe, no vuelve a
-// sembrar nada.
+// Conexión a MongoDB Atlas + contenido semilla. Migrado desde node:sqlite (mismo motivo
+// que los demás sitios): el disco de la app en Hostinger no sobrevive a un redeploy.
 
-const path = require('path');
-const fs = require('fs');
-const { DatabaseSync } = require('node:sqlite');
+const { MongoClient, ObjectId } = require('mongodb');
 const bcrypt = require('bcryptjs');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-
-const db = new DatabaseSync(path.join(DATA_DIR, 'site.db'));
-db.exec('PRAGMA journal_mode = WAL');
-
-function transaction(fn) {
-  return (...args) => {
-    db.exec('BEGIN');
-    try {
-      const result = fn(...args);
-      db.exec('COMMIT');
-      return result;
-    } catch (err) {
-      db.exec('ROLLBACK');
-      throw err;
-    }
-  };
+const uri = process.env.MONGODB_URI;
+if (!uri) {
+  throw new Error(
+    'Falta la variable de entorno MONGODB_URI (el connection string de MongoDB Atlas). ' +
+    'Copiá .env.example a .env y completala antes de arrancar el servidor.'
+  );
 }
 
-db.exec(`
-  CREATE TABLE IF NOT EXISTS content (
-    key TEXT PRIMARY KEY,
-    value TEXT NOT NULL DEFAULT ''
-  );
+const client = new MongoClient(uri);
+let db = null;
 
-  CREATE TABLE IF NOT EXISTS gallery_images (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    url TEXT NOT NULL,
-    alt_text TEXT NOT NULL DEFAULT '',
-    position INTEGER NOT NULL DEFAULT 0
-  );
+function getDb() {
+  if (!db) throw new Error('La base de datos todavía no está conectada. Llamá a connect() primero.');
+  return db;
+}
 
-  CREATE TABLE IF NOT EXISTS social_links (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    platform TEXT NOT NULL,
-    label TEXT NOT NULL,
-    url TEXT NOT NULL,
-    visible INTEGER NOT NULL DEFAULT 1,
-    position INTEGER NOT NULL DEFAULT 0
-  );
+async function connect() {
+  await client.connect();
+  db = client.db();
+  await ensureIndexes();
+  await seedIfEmpty();
+  console.log('Conectado a MongoDB Atlas.');
+}
 
-  CREATE TABLE IF NOT EXISTS contact_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL,
-    phone TEXT NOT NULL DEFAULT '',
-    message TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    is_read INTEGER NOT NULL DEFAULT 0
-  );
+async function ensureIndexes() {
+  await db.collection('gallery_images').createIndex({ position: 1 });
+  await db.collection('social_links').createIndex({ position: 1 });
+  await db.collection('testimonials').createIndex({ status: 1, position: 1 });
+  await db.collection('contact_messages').createIndex({ created_at: -1 });
+}
 
-  CREATE TABLE IF NOT EXISTS testimonials (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    rating INTEGER,
-    text TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending',
-    position INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS admin_user (
-    username TEXT PRIMARY KEY,
-    password_hash TEXT NOT NULL
-  );
-`);
-
-// --- Contenido semilla (texto real del sitio actual de LeCoin Recepciones) ---
+// --- Contenido semilla (texto real del sitio de Le Coin Eventos) ---
 const DEFAULT_CONTENT = {
   site_name: 'Le Coin Eventos',
   logo_image: '/img/seed/logo.png',
@@ -113,8 +72,6 @@ const DEFAULT_CONTENT = {
   salon_subheading: 'Conocé el espacio',
   salon_text: 'Un salón pensado para que cada celebración sea única: climatizado, con capacidad para 120 invitados, iluminación selectiva y todo el equipamiento necesario para que tu evento salga exactamente como lo imaginaste.',
 
-  // Apagado por defecto: si nadie lo activa desde el panel, la portada queda tal cual,
-  // sin esta sección (ver public/js/main.js, que la oculta cuando enabled !== '1').
   proximo_evento_enabled: '0',
   proximo_evento_label: 'Próximo evento',
   proximo_evento_text: '',
@@ -141,40 +98,43 @@ const DEFAULT_SOCIAL = [
   { platform: 'whatsapp', label: 'WhatsApp', url: 'https://wa.me/5491124615068?text=Hola!%20Quisiera%20coordinar%20una%20visita%20al%20sal%C3%B3n.' }
 ];
 
-function seedIfEmpty() {
-  const contentCount = db.prepare('SELECT COUNT(*) AS n FROM content').get().n;
-  if (contentCount === 0) {
-    const insert = db.prepare('INSERT INTO content (key, value) VALUES (?, ?)');
-    const insertMany = transaction((entries) => {
-      for (const [key, value] of entries) insert.run(key, String(value));
-    });
-    insertMany(Object.entries(DEFAULT_CONTENT));
+const DEFAULT_GALLERY = [
+  { url: '/img/seed/banquete.png', alt_text: 'Banquete elegante con detalles sofisticados' }
+];
+
+async function seedIfEmpty() {
+  const contentDoc = await db.collection('content').findOne({ _id: 'main' });
+  if (!contentDoc) {
+    await db.collection('content').insertOne({ _id: 'main', ...DEFAULT_CONTENT });
+  } else {
+    const missing = {};
+    for (const [key, value] of Object.entries(DEFAULT_CONTENT)) {
+      if (!(key in contentDoc)) missing[key] = value;
+    }
+    if (Object.keys(missing).length > 0) {
+      await db.collection('content').updateOne({ _id: 'main' }, { $set: missing });
+    }
   }
 
-  const galleryCount = db.prepare('SELECT COUNT(*) AS n FROM gallery_images').get().n;
+  const galleryCount = await db.collection('gallery_images').countDocuments();
   if (galleryCount === 0) {
-    db.prepare('INSERT INTO gallery_images (url, alt_text, position) VALUES (?, ?, 0)').run(
-      '/img/seed/banquete.png',
-      'Banquete elegante con detalles sofisticados'
+    await db.collection('gallery_images').insertMany(
+      DEFAULT_GALLERY.map((item, i) => ({ ...item, position: i }))
     );
   }
 
-  const socialCount = db.prepare('SELECT COUNT(*) AS n FROM social_links').get().n;
+  const socialCount = await db.collection('social_links').countDocuments();
   if (socialCount === 0) {
-    const insert = db.prepare(
-      'INSERT INTO social_links (platform, label, url, visible, position) VALUES (?, ?, ?, 1, ?)'
+    await db.collection('social_links').insertMany(
+      DEFAULT_SOCIAL.map((item, i) => ({ ...item, visible: true, position: i }))
     );
-    const insertMany = transaction((items) => {
-      items.forEach((item, i) => insert.run(item.platform, item.label, item.url, i));
-    });
-    insertMany(DEFAULT_SOCIAL);
   }
 
-  const adminCount = db.prepare('SELECT COUNT(*) AS n FROM admin_user').get().n;
-  if (adminCount === 0) {
+  const adminDoc = await db.collection('admin_user').findOne({ _id: 'admin' });
+  if (!adminDoc) {
     const password = process.env.ADMIN_PASSWORD || 'cambiar-esta-clave';
     const hash = bcrypt.hashSync(password, 10);
-    db.prepare('INSERT INTO admin_user (username, password_hash) VALUES (?, ?)').run('admin', hash);
+    await db.collection('admin_user').insertOne({ _id: 'admin', password_hash: hash });
     if (!process.env.ADMIN_PASSWORD) {
       console.warn(
         '[aviso] No hay ADMIN_PASSWORD en .env: se creó el usuario admin con la clave por defecto ' +
@@ -184,8 +144,4 @@ function seedIfEmpty() {
   }
 }
 
-seedIfEmpty();
-
-db.transaction = transaction;
-
-module.exports = db;
+module.exports = { connect, getDb, ObjectId };
