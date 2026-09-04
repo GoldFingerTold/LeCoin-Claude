@@ -33,6 +33,8 @@ async function ensureIndexes() {
   await db.collection('social_links').createIndex({ position: 1 });
   await db.collection('testimonials').createIndex({ status: 1, position: 1 });
   await db.collection('contact_messages').createIndex({ created_at: -1 });
+  await db.collection('product_categories').createIndex({ position: 1 });
+  await db.collection('products').createIndex({ category_id: 1, position: 1 });
 }
 
 // --- Contenido semilla (texto real del sitio de Le Coin Eventos) ---
@@ -44,6 +46,7 @@ const DEFAULT_CONTENT = {
   nav_home_label: 'Inicio',
   nav_servicios_label: 'Nuestros Servicios',
   nav_salon_label: 'El Salón',
+  nav_productos_label: 'Productos',
   nav_testimonios_label: 'Testimonios',
   nav_contacto_label: 'Contacto',
 
@@ -71,6 +74,9 @@ const DEFAULT_CONTENT = {
   salon_heading: 'El Salón',
   salon_subheading: 'Conocé el espacio',
   salon_text: 'Un salón pensado para que cada celebración sea única: climatizado, con capacidad para 120 invitados, iluminación selectiva y todo el equipamiento necesario para que tu evento salga exactamente como lo imaginaste.',
+
+  productos_heading: 'Nuestros productos y precios',
+  productos_subheading: 'Escaneá para ver',
 
   proximo_evento_enabled: '0',
   proximo_evento_label: 'Próximo evento',
